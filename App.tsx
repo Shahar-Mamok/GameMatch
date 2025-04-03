@@ -5,6 +5,7 @@ import { WelcomeScreen } from './src/screens/WelcomeScreen';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { RegisterScreen } from './src/screens/RegisterScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
+import { SwipeScreen } from './src/screens/SwipeScreen';
 import { RootStackParamList } from './src/types/navigation';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -12,17 +13,25 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export default function App() {
   return (
     <NavigationContainer>
-      <Stack.Navigator 
+      <Stack.Navigator
         initialRouteName="Welcome"
         screenOptions={{
           headerShown: false,
           animation: 'slide_from_right',
+          gestureEnabled: false
         }}
       >
         <Stack.Screen name="Welcome" component={WelcomeScreen} />
         <Stack.Screen name="Auth" component={AuthScreen} />
         <Stack.Screen name="Register" component={RegisterScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen 
+          name="Swipe" 
+          component={SwipeScreen}
+          options={{
+            gestureEnabled: false,
+          }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

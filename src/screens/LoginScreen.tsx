@@ -11,19 +11,16 @@ type LoginScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Login'>;
 };
 
-const schema = yup.object().shape({
+const schema = yup.object({
   email: yup.string().required('Email is required').email('Invalid email'),
   password: yup.string().required('Password is required'),
-});
+}).required();
 
-type FormData = {
-  email: string;
-  password: string;
-};
+type FormData = yup.InferType<typeof schema>;
 
 export const LoginScreen = ({ navigation }: LoginScreenProps) => {
   const { control, handleSubmit, formState: { errors } } = useForm<FormData>({
-    resolver: yupResolver(schema),
+    resolver: yupResolver(schema) as any,
   });
 
   const fadeAnim = new Animated.Value(0);
@@ -45,8 +42,8 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
   }, []);
 
   const onSubmit = (data: FormData) => {
-    console.log(data);
-    // Here we'll add Firebase integration later
+    // Temporarily skip validation for testing
+    navigation.replace('Swipe');
   };
 
   return (
@@ -114,7 +111,7 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
 
           <TouchableOpacity 
             style={styles.button}
-            onPress={handleSubmit(onSubmit)}
+            onPress={() => navigation.replace('Swipe')}
             activeOpacity={0.8}
           >
             <Text style={styles.buttonText}>Login</Text>
