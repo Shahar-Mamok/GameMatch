@@ -43,7 +43,7 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
 
   const onSubmit = (data: FormData) => {
     // Temporarily skip validation for testing
-    navigation.replace('Swipe');
+    navigation.replace('MainApp');
   };
 
   return (
@@ -111,7 +111,7 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
 
           <TouchableOpacity 
             style={styles.button}
-            onPress={() => navigation.replace('Swipe')}
+            onPress={() => navigation.replace('MainApp')}
             activeOpacity={0.8}
           >
             <Text style={styles.buttonText}>Login</Text>

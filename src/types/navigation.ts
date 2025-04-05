@@ -5,8 +5,14 @@ export type RootStackParamList = {
   Auth: undefined;
   Register: undefined;
   Login: undefined;
-  Main: undefined;
-  Swipe: undefined;
+  MainApp: undefined;
+};
+
+export type TabParamList = {
+  Cards: undefined;
+  Profile: undefined;
+  Chats: undefined;
+  Settings: undefined;
 };
 
 declare global {
