@@ -17,52 +17,49 @@ export const WelcomeScreen = ({ navigation }: WelcomeScreenProps) => {
   const buttonOpacity = new Animated.Value(0);
 
   useEffect(() => {
-    // Welcome text animations
     Animated.sequence([
       Animated.parallel([
         Animated.timing(titleOpacity, {
           toValue: 1,
           duration: 1000,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
         Animated.timing(titlePosition, {
           toValue: 0,
           duration: 1000,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
       ]),
       Animated.parallel([
         Animated.timing(subtitleOpacity, {
           toValue: 1,
           duration: 800,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
         Animated.timing(subtitlePosition, {
           toValue: 0,
           duration: 800,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
       ]),
-      // Button fade in
       Animated.timing(buttonOpacity, {
         toValue: 1,
         duration: 500,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }),
     ]).start();
 
-    // Continuous pulse animation for the button
     Animated.loop(
       Animated.sequence([
         Animated.timing(buttonScale, {
           toValue: 1.1,
           duration: 1000,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
         Animated.timing(buttonScale, {
           toValue: 1,
           duration: 1000,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
       ])
     ).start();
@@ -141,16 +138,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#ffffff',
     marginBottom: 15,
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 5,
   },
   subtitle: {
     fontSize: 18,
     color: '#cccccc',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
     marginBottom: 50,
   },
   buttonContainer: {
@@ -188,4 +179,4 @@ const styles = StyleSheet.create({
     opacity: 0.3,
     zIndex: -1,
   },
-}); 
+});

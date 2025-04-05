@@ -1,244 +1,179 @@
-import React, { useEffect } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, Animated, KeyboardAvoidingView, Platform } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useForm, Controller } from 'react-hook-form';
-import { yupResolver } from '@hookform/resolvers/yup';
-import * as yup from 'yup';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../types/navigation';
+import React, { useState } from 'react';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { TextInput, Button, Text, useTheme } from 'react-native-paper';
+import { supabase } from '../lib/supabase';
+import { useNavigation } from '@react-navigation/native';
 
-type RegisterScreenProps = {
-  navigation: NativeStackNavigationProp<RootStackParamList, 'Register'>;
-};
+export function RegisterScreen() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const navigation = useNavigation();
+  const theme = useTheme();
 
-const schema = yup.object().shape({
-  username: yup.string().required('Username is required').min(3, 'Username must be at least 3 characters'),
-  email: yup.string().required('Email is required').email('Invalid email'),
-  password: yup.string().required('Password is required').min(6, 'Password must be at least 6 characters'),
-});
+  async function handleRegister() {
+    if (!email || !password || !username) {
+      setError('Please fill in all fields');
+      return;
+    }
 
-type FormData = {
-  username: string;
-  email: string;
-  password: string;
-};
+    try {
+      setLoading(true);
+      setError('');
 
-export const RegisterScreen = ({ navigation }: RegisterScreenProps) => {
-  const { control, handleSubmit, formState: { errors } } = useForm<FormData>({
-    resolver: yupResolver(schema),
-  });
+      console.log('Starting registration with:', { email, username });
 
-  const fadeAnim = new Animated.Value(0);
-  const slideAnim = new Animated.Value(50);
+      // Create auth user with email confirmation
+      const { data: authData, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            username: username,
+          }
+        }
+      });
 
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 1000,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 1000,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
+      if (signUpError) {
+        console.error('Signup error:', signUpError);
+        throw signUpError;
+      }
 
-  const onSubmit = (data: FormData) => {
-    console.log(data);
-    // Here we'll add Firebase integration later
-  };
+      if (!authData?.user) {
+        throw new Error('No user data returned');
+      }
+
+      console.log('Auth successful, user created:', authData.user.id);
+
+      // Create user profile using service role (if available) or wait for email verification
+      try {
+        const { error: profileError } = await supabase
+          .from('users')
+          .insert({
+            id: authData.user.id,
+            email: email.toLowerCase(),
+            username,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+
+        if (profileError) {
+          console.error('Profile creation error:', profileError);
+          // Continue even if profile creation fails - it can be created later
+        }
+      } catch (profileErr) {
+        console.error('Profile creation attempt failed:', profileErr);
+        // Continue with the registration process
+      }
+
+      // Show success message
+      setError('Registration successful! Please check your email to verify your account before logging in.');
+      
+      // Navigate to login after a delay
+      setTimeout(() => {
+        navigation.navigate('Login' as never);
+      }, 3000);
+
+    } catch (err: any) {
+      console.error('Registration error details:', {
+        message: err.message,
+        code: err.code,
+        details: err.details,
+        hint: err.hint,
+        stack: err.stack
+      });
+      setError(err.message || 'An unexpected error occurred during registration');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
-    <LinearGradient
-      colors={['#1a1a1a', '#2d1b4e', '#1a1a1a']}
-      style={styles.container}
-    >
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-      >
-        <Animated.View 
-          style={[
-            styles.formContainer,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
-          ]}
+    <View style={styles.container}>
+      <View style={styles.form}>
+        <Text variant="headlineMedium" style={styles.title}>Create Account</Text>
+        
+        <TextInput
+          label="Username"
+          value={username}
+          onChangeText={setUsername}
+          style={styles.input}
+          autoCapitalize="none"
+        />
+
+        <TextInput
+          label="Email"
+          value={email}
+          onChangeText={setEmail}
+          style={styles.input}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+
+        <TextInput
+          label="Password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          style={styles.input}
+        />
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <Button
+          mode="contained"
+          onPress={handleRegister}
+          loading={loading}
+          style={styles.button}
         >
-          <Text style={styles.title}>Create Account</Text>
-          
-          <Controller
-            control={control}
-            name="username"
-            render={({ field: { onChange, value, onBlur } }) => (
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Username"
-                  placeholderTextColor="#666"
-                  onChangeText={onChange}
-                  onBlur={onBlur}
-                  value={value}
-                  autoCapitalize="none"
-                />
-                {errors.username && (
-                  <Text style={styles.errorText}>{errors.username.message}</Text>
-                )}
-              </View>
-            )}
-          />
+          Register
+        </Button>
 
-          <Controller
-            control={control}
-            name="email"
-            render={({ field: { onChange, value, onBlur } }) => (
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Email"
-                  placeholderTextColor="#666"
-                  onChangeText={onChange}
-                  onBlur={onBlur}
-                  value={value}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-                {errors.email && (
-                  <Text style={styles.errorText}>{errors.email.message}</Text>
-                )}
-              </View>
-            )}
-          />
-
-          <Controller
-            control={control}
-            name="password"
-            render={({ field: { onChange, value, onBlur } }) => (
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Password"
-                  placeholderTextColor="#666"
-                  onChangeText={onChange}
-                  onBlur={onBlur}
-                  value={value}
-                  secureTextEntry
-                />
-                {errors.password && (
-                  <Text style={styles.errorText}>{errors.password.message}</Text>
-                )}
-              </View>
-            )}
-          />
-
-          <TouchableOpacity 
-            style={styles.button}
-            onPress={handleSubmit(onSubmit)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.buttonText}>Register</Text>
-            <View style={styles.buttonGlow} />
+        <View style={styles.footer}>
+          <Text>Already have an account? </Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+            <Text style={styles.link}>Login</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.loginLink}
-            onPress={() => navigation.navigate('Login')}
-          >
-            <Text style={styles.loginText}>
-              Already have an account? <Text style={styles.loginTextBold}>Login</Text>
-            </Text>
-          </TouchableOpacity>
-        </Animated.View>
-      </KeyboardAvoidingView>
-    </LinearGradient>
+        </View>
+      </View>
+    </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  formContainer: {
-    flex: 1,
+    backgroundColor: '#fff',
     padding: 20,
+  },
+  form: {
+    flex: 1,
     justifyContent: 'center',
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 40,
     textAlign: 'center',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 5,
-  },
-  inputContainer: {
-    marginBottom: 20,
+    marginBottom: 30,
   },
   input: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 25,
-    padding: 15,
-    color: '#ffffff',
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  errorText: {
-    color: '#ff6b6b',
-    marginTop: 5,
-    marginLeft: 15,
-    fontSize: 12,
+    marginBottom: 15,
   },
   button: {
-    backgroundColor: '#7B2CBF',
-    paddingVertical: 15,
-    borderRadius: 25,
-    marginTop: 20,
-    elevation: 5,
-    shadowColor: '#7B2CBF',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
+    marginTop: 10,
+    padding: 5,
   },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: 'bold',
+  error: {
+    color: 'red',
     textAlign: 'center',
+    marginBottom: 10,
   },
-  buttonGlow: {
-    position: 'absolute',
-    top: -2,
-    left: -2,
-    right: -2,
-    bottom: -2,
-    borderRadius: 27,
-    backgroundColor: '#7B2CBF',
-    opacity: 0.3,
-    zIndex: -1,
-  },
-  loginLink: {
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     marginTop: 20,
-    alignItems: 'center',
   },
-  loginText: {
-    color: '#cccccc',
-    fontSize: 16,
-  },
-  loginTextBold: {
-    color: '#7B2CBF',
-    fontWeight: 'bold',
+  link: {
+    color: '#2196F3',
   },
 }); 
