@@ -1,11 +1,12 @@
-import React, { useEffect } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, Animated, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, Animated, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
+import { supabase } from '../lib/supabase';
 
 type LoginScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Login'>;
@@ -19,6 +20,7 @@ const schema = yup.object({
 type FormData = yup.InferType<typeof schema>;
 
 export const LoginScreen = ({ navigation }: LoginScreenProps) => {
+  const [loading, setLoading] = useState(false);
   const { control, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: yupResolver(schema) as any,
   });
@@ -41,9 +43,21 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
     ]).start();
   }, []);
 
-  const onSubmit = (data: FormData) => {
-    // Temporarily skip validation for testing
-    navigation.replace('MainApp');
+  const onSubmit = async (data: FormData) => {
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
+      });
+
+      if (error) throw error;
+      navigation.replace('MainApp');
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -110,11 +124,12 @@ export const LoginScreen = ({ navigation }: LoginScreenProps) => {
           />
 
           <TouchableOpacity 
-            style={styles.button}
-            onPress={() => navigation.replace('MainApp')}
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleSubmit(onSubmit)}
             activeOpacity={0.8}
+            disabled={loading}
           >
-            <Text style={styles.buttonText}>Login</Text>
+            <Text style={styles.buttonText}>{loading ? 'Loading...' : 'Login'}</Text>
             <View style={styles.buttonGlow} />
           </TouchableOpacity>
 
@@ -150,9 +165,11 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     marginBottom: 40,
     textAlign: 'center',
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 5,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
   },
   inputContainer: {
     marginBottom: 20,
@@ -214,5 +231,8 @@ const styles = StyleSheet.create({
   registerTextBold: {
     color: '#7B2CBF',
     fontWeight: 'bold',
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
 }); 
