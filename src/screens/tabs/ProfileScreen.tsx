@@ -11,41 +11,39 @@ import {
   Alert,
   RefreshControl,
 } from 'react-native';
-import { supabase } from '../../lib/supabase';
-import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Button, TextInput } from 'react-native-paper';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { supabase } from '../../lib/supabase';
+import { User, Game, UserGame } from '../../types';
 
 const { width } = Dimensions.get('window');
 
-interface Game {
-  id: string;
-  name: string;
-  genre: string;
-  platform: string;
-  image_url: string;
-  description: string;
-}
+// Add type for icon names
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
 interface UserProfile {
   id: string;
   email: string;
   username: string;
-  display_name: string;
-  avatar_url: string;
-  bio: string;
+  created_at: string;
+  updated_at: string;
+  avatar_url: string | null;
+  bio: string | null;
   game_preferences: {
-    gameTypes: ('competitive' | 'casual' | 'coop')[];
-    playStyle: ('aggressive' | 'defensive' | 'balanced')[];
-  };
-  stats: {
-    [gameId: string]: {
-      rank?: string;
-      level?: number;
-      winRate?: number;
-      playTime?: number;
-    };
-  };
+    gameTypes: string[];
+    playStyle: string[];
+  } | null;
+  stats: Record<string, any> | null;
+  display_name: string | null;
+  genre: string | null;
+  platform: string | null;
+}
+
+interface UserGameResponse {
+  game_id: string;
+  games: Game;
 }
 
 const ProfileScreen = () => {
@@ -54,6 +52,17 @@ const ProfileScreen = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState('');
+  const [username, setUsername] = useState('');
+  const [bio, setBio] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [gamePreferences, setGamePreferences] = useState<string[]>([]);
+  const [playStyle, setPlayStyle] = useState<string[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isAddingGame, setIsAddingGame] = useState(false);
+  const [newGameName, setNewGameName] = useState('');
+  const [genre, setGenre] = useState<string>('');
+  const [platform, setPlatform] = useState<string>('');
 
   useEffect(() => {
     loadProfileAndGames();
@@ -80,21 +89,22 @@ const ProfileScreen = () => {
         .from('user_games')
         .select(`
           game_id,
-          games (
-            id,
-            name,
-            genre,
-            platform,
-            image_url,
-            description
-          )
+          games (*)
         `)
-        .eq('user_id', user.id);
+        .eq('user_id', user.id) as { data: UserGameResponse[] | null, error: any };
 
       if (gamesError) throw gamesError;
 
       setProfile(profileData);
-      setGames(userGames.map(ug => ug.games));
+      // Now userGames is properly typed
+      setGames((userGames || []).map(ug => ug.games));
+      
+      setDisplayName(profileData.display_name || '');
+      setUsername(profileData.username || '');
+      setBio(profileData.bio || '');
+      setAvatarUrl(profileData.avatar_url);
+      setGamePreferences(profileData.game_preferences?.gameTypes || []);
+      setPlayStyle(profileData.game_preferences?.playStyle || []);
     } catch (error: any) {
       console.error('Error loading profile:', error);
       setError(error.message || 'Failed to load profile');
@@ -110,22 +120,34 @@ const ProfileScreen = () => {
     loadProfileAndGames();
   };
 
-  const handleUpdateProfile = async (updates: Partial<UserProfile>) => {
+  const handleSave = async () => {
     try {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No user logged in');
 
-      const { error: updateError } = await supabase
+      // Update users table with all fields
+      const { error: userError } = await supabase
         .from('users')
-        .update(updates)
+        .update({
+          display_name: displayName,
+          username,
+          bio,
+          avatar_url: avatarUrl,
+          game_preferences: {
+            gameTypes: gamePreferences,
+            playStyle: playStyle
+          },
+          genre: games[0]?.genre || null, // Take genre from first game if exists
+          platform: games[0]?.platform || null, // Take platform from first game if exists
+          updated_at: new Date().toISOString()
+        })
         .eq('id', user.id);
 
-      if (updateError) throw updateError;
+      if (userError) throw userError;
 
-      // Reload profile after update
-      await loadProfileAndGames();
       Alert.alert('Success', 'Profile updated successfully');
+      setIsEditing(false);
     } catch (error: any) {
       console.error('Error updating profile:', error);
       Alert.alert('Error', error.message || 'Failed to update profile');
@@ -141,22 +163,22 @@ const ProfileScreen = () => {
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.5,
-        base64: true,
       });
 
       if (!result.canceled) {
+        setLoading(true);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('No user logged in');
+
+        // Convert image to blob
+        const response = await fetch(result.assets[0].uri);
+        const blob = await response.blob();
 
         // Upload image to Supabase Storage
         const filePath = `${user.id}/avatar.jpg`;
         const { error: uploadError } = await supabase.storage
           .from('avatars')
-          .upload(filePath, {
-            uri: result.assets[0].uri,
-            type: 'image/jpeg',
-            name: 'avatar.jpg',
-          }, {
+          .upload(filePath, blob, {
             upsert: true
           });
 
@@ -167,13 +189,115 @@ const ProfileScreen = () => {
           .from('avatars')
           .getPublicUrl(filePath);
 
-        // Update profile with new avatar URL
-        await handleUpdateProfile({ avatar_url: publicUrl });
+        setAvatarUrl(publicUrl);
+        
+        // Update user profile with new avatar URL
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({ avatar_url: publicUrl })
+          .eq('id', user.id);
+
+        if (updateError) throw updateError;
       }
     } catch (error: any) {
       console.error('Error uploading image:', error);
       Alert.alert('Error', error.message || 'Failed to upload image');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const renderEditableSection = (
+    title: string,
+    icon: IconName,
+    value: string,
+    setValue: (value: string) => void,
+    placeholder: string,
+    multiline: boolean = false
+  ) => (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Ionicons name={icon} size={24} color="#7B2CBF" />
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
+      {isEditing ? (
+        <TextInput
+          style={[styles.input, multiline && styles.multilineInput]}
+          value={value}
+          onChangeText={setValue}
+          placeholder={placeholder}
+          multiline={multiline}
+          mode="outlined"
+          outlineColor="#7B2CBF"
+          activeOutlineColor="#2196F3"
+        />
+      ) : (
+        <Text style={styles.sectionText}>{value || `No ${title.toLowerCase()} yet`}</Text>
+      )}
+    </View>
+  );
+
+  const renderPreferencesSection = (
+    title: string,
+    icon: IconName,
+    preferences: string[],
+    setPreferences: (prefs: string[]) => void,
+    options: string[]
+  ) => (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Ionicons name={icon} size={24} color="#7B2CBF" />
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
+      {isEditing ? (
+        <View style={styles.preferencesGrid}>
+          {options.map((option) => (
+            <TouchableOpacity
+              key={option}
+              style={[
+                styles.preferenceOption,
+                preferences.includes(option) && styles.preferenceOptionSelected
+              ]}
+              onPress={() => {
+                if (preferences.includes(option)) {
+                  setPreferences(preferences.filter(p => p !== option));
+                } else {
+                  setPreferences([...preferences, option]);
+                }
+              }}
+            >
+              <Text style={[
+                styles.preferenceOptionText,
+                preferences.includes(option) && styles.preferenceOptionTextSelected
+              ]}>
+                {option}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : (
+        <View style={styles.preferencesContainer}>
+          {preferences.map((pref, index) => (
+            <LinearGradient
+              key={index}
+              colors={['#7B2CBF', '#2196F3']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.preferenceTag}
+            >
+              <Text style={styles.preferenceText}>{pref}</Text>
+            </LinearGradient>
+          ))}
+          {preferences.length === 0 && (
+            <Text style={styles.emptyText}>No {title.toLowerCase()} set</Text>
+          )}
+        </View>
+      )}
+    </View>
+  );
+
+  const addGame = () => {
+    setIsAddingGame(true);
   };
 
   if (loading && !refreshing) {
@@ -204,8 +328,8 @@ const ProfileScreen = () => {
         <View style={styles.header}>
           <TouchableOpacity onPress={handleImagePick} style={styles.avatarOuterContainer}>
             <View style={styles.avatarContainer}>
-              {profile?.avatar_url ? (
-                <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
               ) : (
                 <View style={styles.avatarPlaceholder}>
                   <Ionicons name="person" size={40} color="#fff" />
@@ -216,8 +340,21 @@ const ProfileScreen = () => {
               </View>
             </View>
           </TouchableOpacity>
-          <Text style={styles.displayName}>{profile?.display_name || 'Add Display Name'}</Text>
-          <Text style={styles.username}>@{profile?.username}</Text>
+          {isEditing ? (
+            <TextInput
+              style={styles.displayNameInput}
+              value={displayName}
+              onChangeText={setDisplayName}
+              placeholder="Add Display Name"
+              mode="flat"
+              underlineColor="transparent"
+              placeholderTextColor="rgba(255,255,255,0.7)"
+              theme={{ colors: { text: '#fff' } }}
+            />
+          ) : (
+            <Text style={styles.displayName}>{displayName || 'Add Display Name'}</Text>
+          )}
+          <Text style={styles.username}>@{username}</Text>
         </View>
       </LinearGradient>
 
@@ -228,53 +365,23 @@ const ProfileScreen = () => {
       )}
 
       <View style={styles.content}>
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="information-circle" size={24} color="#7B2CBF" />
-            <Text style={styles.sectionTitle}>Bio</Text>
-          </View>
-          <Text style={styles.bio}>{profile?.bio || 'No bio yet'}</Text>
-        </View>
+        {renderEditableSection('Bio', 'information-circle', bio, setBio, 'Tell us about yourself...', true)}
+        
+        {renderPreferencesSection(
+          'Game Preferences',
+          'game-controller',
+          gamePreferences,
+          setGamePreferences,
+          ['Competitive', 'Casual', 'Co-op', 'Story-driven', 'Multiplayer', 'Solo']
+        )}
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="game-controller" size={24} color="#7B2CBF" />
-            <Text style={styles.sectionTitle}>Game Preferences</Text>
-          </View>
-          <View style={styles.preferencesContainer}>
-            {profile?.game_preferences?.gameTypes?.map((type, index) => (
-              <LinearGradient
-                key={index}
-                colors={['#7B2CBF', '#2196F3']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.preferenceTag}
-              >
-                <Text style={styles.preferenceText}>{type}</Text>
-              </LinearGradient>
-            )) || <Text style={styles.emptyText}>No game preferences set</Text>}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="trophy" size={24} color="#7B2CBF" />
-            <Text style={styles.sectionTitle}>Play Style</Text>
-          </View>
-          <View style={styles.preferencesContainer}>
-            {profile?.game_preferences?.playStyle?.map((style, index) => (
-              <LinearGradient
-                key={index}
-                colors={['#2196F3', '#7B2CBF']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.preferenceTag}
-              >
-                <Text style={styles.preferenceText}>{style}</Text>
-              </LinearGradient>
-            )) || <Text style={styles.emptyText}>No play style set</Text>}
-          </View>
-        </View>
+        {renderPreferencesSection(
+          'Play Style',
+          'trophy',
+          playStyle,
+          setPlayStyle,
+          ['Aggressive', 'Defensive', 'Balanced', 'Support', 'Leader', 'Follower']
+        )}
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -285,20 +392,18 @@ const ProfileScreen = () => {
             {games.length > 0 ? (
               games.map((game) => (
                 <TouchableOpacity key={game.id} style={styles.gameCard}>
-                  <Image source={{ uri: game.image_url }} style={styles.gameImage} />
+                  <Image source={{ uri: 'https://via.placeholder.com/200x300' }} style={styles.gameImage} />
                   <LinearGradient
                     colors={['transparent', 'rgba(0,0,0,0.8)']}
                     style={styles.gameOverlay}
                   >
                     <Text style={styles.gameName}>{game.name}</Text>
-                    {profile?.stats?.[game.id] && (
-                      <View style={styles.gameStats}>
-                        <Text style={styles.statText}>Level: {profile.stats[game.id].level}</Text>
-                        {profile.stats[game.id].rank && (
-                          <Text style={styles.statText}>Rank: {profile.stats[game.id].rank}</Text>
-                        )}
-                      </View>
-                    )}
+                    <View style={styles.gameTags}>
+                      {game.genre && <Text style={styles.gameTag}>{game.genre}</Text>}
+                      {game.platform && game.platform.map((p, i) => (
+                        <Text key={i} style={styles.gameTag}>{p}</Text>
+                      ))}
+                    </View>
                   </LinearGradient>
                 </TouchableOpacity>
               ))
@@ -306,8 +411,107 @@ const ProfileScreen = () => {
               <Text style={styles.emptyText}>No games added yet</Text>
             )}
           </ScrollView>
+          {isEditing && (
+            <Button 
+              mode="contained" 
+              onPress={addGame}
+              style={styles.addButton}
+              icon="plus"
+            >
+              Add Game
+            </Button>
+          )}
         </View>
+
+        <Button
+          mode="contained"
+          onPress={() => {
+            if (isEditing) {
+              handleSave();
+            } else {
+              setIsEditing(true);
+            }
+          }}
+          style={[styles.editButton, isEditing && styles.saveButton]}
+          icon={isEditing ? "check" : "pencil"}
+        >
+          {isEditing ? 'Save Changes' : 'Edit Profile'}
+        </Button>
       </View>
+
+      {isAddingGame && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.addGameModal}>
+            <Text style={styles.modalTitle}>Add New Game</Text>
+            <TextInput
+              style={styles.input}
+              value={newGameName}
+              onChangeText={setNewGameName}
+              placeholder="Game name"
+              mode="outlined"
+              outlineColor="#7B2CBF"
+              activeOutlineColor="#2196F3"
+            />
+            <TextInput
+              style={styles.input}
+              value={genre}
+              onChangeText={setGenre}
+              placeholder="Genre (e.g. FPS, RPG, MOBA)"
+              mode="outlined"
+              outlineColor="#7B2CBF"
+              activeOutlineColor="#2196F3"
+            />
+            <TextInput
+              style={styles.input}
+              value={platform}
+              onChangeText={setPlatform}
+              placeholder="Platform (e.g. PC, PS5, Xbox)"
+              mode="outlined"
+              outlineColor="#7B2CBF"
+              activeOutlineColor="#2196F3"
+            />
+            <View style={styles.modalButtons}>
+              <Button 
+                mode="outlined" 
+                onPress={() => {
+                  setIsAddingGame(false);
+                  setNewGameName('');
+                  setGenre('');
+                  setPlatform('');
+                }}
+                style={styles.modalButton}
+              >
+                Cancel
+              </Button>
+              <Button 
+                mode="contained"
+                onPress={async () => {
+                  if (newGameName) {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (user) {
+                      await supabase
+                        .from('users')
+                        .update({
+                          genre,
+                          platform,
+                        })
+                        .eq('id', user.id);
+                    }
+                    setGenre('');
+                    setPlatform('');
+                    setIsAddingGame(false);
+                    setNewGameName('');
+                  }
+                }}
+                style={[styles.modalButton, styles.modalButtonPrimary]}
+                disabled={!newGameName}
+              >
+                Add Game
+              </Button>
+            </View>
+          </View>
+        </View>
+      )}
     </ScrollView>
   );
 };
@@ -366,6 +570,12 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginBottom: 5,
   },
+  displayNameInput: {
+    fontSize: 24,
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 5,
+  },
   username: {
     fontSize: 16,
     color: 'rgba(255,255,255,0.8)',
@@ -387,25 +597,41 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     color: '#333',
   },
-  bio: {
+  input: {
+    marginBottom: 15,
+    backgroundColor: '#fff',
+  },
+  multilineInput: {
+    minHeight: 100,
+  },
+  sectionText: {
     fontSize: 16,
-    color: '#666',
+    color: '#333',
     lineHeight: 24,
   },
-  preferencesContainer: {
+  preferencesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
+    marginTop: 10,
   },
-  preferenceTag: {
+  preferenceOption: {
     paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#7B2CBF',
   },
-  preferenceText: {
-    color: '#fff',
+  preferenceOptionSelected: {
+    backgroundColor: '#7B2CBF',
+  },
+  preferenceOptionText: {
+    color: '#7B2CBF',
     fontSize: 14,
     fontWeight: '500',
+  },
+  preferenceOptionTextSelected: {
+    color: '#fff',
   },
   gamesContainer: {
     marginHorizontal: -5,
@@ -437,16 +663,18 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
   },
-  gameStats: {
+  gameTags: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 5,
+    marginTop: 5,
   },
-  statText: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 14,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+  gameTag: {
+    color: '#fff',
+    fontSize: 12,
+    backgroundColor: 'rgba(123, 44, 191, 0.8)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   errorContainer: {
     padding: 10,
@@ -462,6 +690,70 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 16,
     fontStyle: 'italic',
+  },
+  addButton: {
+    marginTop: 10,
+  },
+  editButton: {
+    marginTop: 20,
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  addGameModal: {
+    backgroundColor: '#fff',
+    padding: 20,
+    borderRadius: 8,
+    marginTop: 10,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  modalButton: {
+    flex: 1,
+  },
+  modalButtonPrimary: {
+    backgroundColor: '#7B2CBF',
+  },
+  saveButton: {
+    backgroundColor: '#4CAF50',
+  },
+  preferencesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  preferenceTag: {
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  preferenceText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
 

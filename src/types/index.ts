@@ -1,3 +1,37 @@
+export interface Player {
+  id: string;
+  user_id: string;
+  name: string;
+  age: number;
+  games: string[];
+  platforms: string[];
+  level: string;
+  availability: string;
+  image_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface User {
+  id: string;
+  email: string;
+  username: string | null;
+  display_name: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Match {
+  id: string;
+  user1_id: string;
+  user2_id: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  matched_at: string;
+  updated_at: string;
+}
+
 export interface UserProfile {
   id: string;
   username: string;
@@ -33,38 +67,36 @@ export interface UserProfile {
 export interface Game {
   id: string;
   name: string;
-  type: 'competitive' | 'casual' | 'coop';
-  platforms: ('pc' | 'ps5' | 'xbox' | 'switch' | 'mobile')[];
-  genres: string[];
-  imageUrl: string;
-  description: string;
-  releaseDate: Date;
-  activePlayers: number;
-  rating: number;
+  genre: string | null;
+  platform: string[];
+  created_at: string;
+  updated_at: string;
 }
 
-export interface Match {
-  id: string;
-  users: string[]; // Array of user IDs
-  game: string; // Game ID
-  status: 'pending' | 'accepted' | 'rejected';
-  matchScore: number; // Compatibility score
-  createdAt: Date;
-  lastInteraction: Date;
-  chatId?: string; // Reference to chat if accepted
+export interface UserGame {
+  user_id: string;
+  game_id: string;
+  created_at: string;
 }
 
 export interface Message {
   id: string;
-  chatId: string;
-  senderId: string;
+  match_id: string;
+  sender_id: string;
   content: string;
-  type: 'text' | 'image' | 'gameInvite';
-  metadata?: {
-    gameId?: string;
-    imageUrl?: string;
-    timestamp?: Date;
-  };
-  createdAt: Date;
-  read: boolean;
+  sent_at: string;
+}
+
+// Extended types for UI
+export interface UserWithGames extends User {
+  games: Game[];
+}
+
+export interface MatchWithUsers extends Match {
+  user1: User;
+  user2: User;
+}
+
+export interface MessageWithSender extends Message {
+  sender: User;
 } 

@@ -1,62 +1,49 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { UserWithGames } from '../types';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const MAX_CARD_WIDTH = Math.min(SCREEN_WIDTH - 32, 400);
 
 type PlayerCardProps = {
-  player: {
-    name: string;
-    age: number;
-    games: string[];
-    platforms: string[];
-    level: string;
-    availability: string;
-    imageUrl: string;
-  };
+  user: UserWithGames;
 };
 
-export const PlayerCard: React.FC<PlayerCardProps> = ({ player }) => {
+export const PlayerCard: React.FC<PlayerCardProps> = ({ user }) => {
   return (
     <View style={styles.card}>
-      <Image source={{ uri: player.imageUrl }} style={styles.image} />
+      <Image 
+        source={{ 
+          uri: user.avatar_url || 'https://picsum.photos/400/600'
+        }} 
+        style={styles.image} 
+      />
       <LinearGradient
         colors={['transparent', 'rgba(0,0,0,0.8)']}
         style={styles.gradient}
       />
       <View style={styles.infoContainer}>
         <View style={styles.nameAge}>
-          <Text style={styles.name}>{player.name}</Text>
-          <Text style={styles.age}>, {player.age}</Text>
+          <Text style={styles.name}>{user.display_name || user.username || 'Anonymous'}</Text>
         </View>
         
-        <View style={styles.platformContainer}>
-          {player.platforms.map((platform, index) => (
-            <View key={index} style={styles.platform}>
-              <Text style={styles.platformText}>{platform}</Text>
+        <View style={styles.gamesContainer}>
+          {user.games.map((game, index) => (
+            <View key={index} style={styles.gameTag}>
+              <Text style={styles.gameText}>{game.name}</Text>
+              {game.platform.map((platform, pIndex) => (
+                <Text key={pIndex} style={styles.platformText}>{platform}</Text>
+              ))}
             </View>
           ))}
         </View>
 
-        <View style={styles.gamesContainer}>
-          {player.games.map((game, index) => (
-            <Text key={index} style={styles.gameText}>
-              {game}
-            </Text>
-          ))}
-        </View>
-
-        <View style={styles.footer}>
-          <View style={styles.levelContainer}>
-            <Text style={styles.levelLabel}>Level</Text>
-            <Text style={styles.levelText}>{player.level}</Text>
+        {user.bio && (
+          <View style={styles.bioContainer}>
+            <Text style={styles.bioText}>{user.bio}</Text>
           </View>
-          <View style={styles.availabilityContainer}>
-            <Text style={styles.availabilityLabel}>Online</Text>
-            <Text style={styles.availabilityText}>{player.availability}</Text>
-          </View>
-        </View>
+        )}
       </View>
     </View>
   );
@@ -104,75 +91,38 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
   },
-  age: {
-    fontSize: 20,
-    color: '#fff',
-    marginLeft: 4,
-  },
-  platformContainer: {
-    flexDirection: 'row',
-    marginBottom: 8,
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  platform: {
-    backgroundColor: '#8b5cf6',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  platformText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '600',
-  },
   gamesContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
     marginBottom: 12,
   },
+  gameTag: {
+    backgroundColor: 'rgba(139, 92, 246, 0.3)',
+    borderRadius: 8,
+    padding: 6,
+  },
   gameText: {
     color: '#fff',
-    fontSize: 13,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 6,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.1)',
-  },
-  levelContainer: {
-    alignItems: 'flex-start',
-  },
-  levelLabel: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 11,
-    marginBottom: 2,
-  },
-  levelText: {
-    color: '#8b5cf6',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  availabilityContainer: {
-    alignItems: 'flex-end',
-  },
-  availabilityLabel: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 11,
-    marginBottom: 2,
-  },
-  availabilityText: {
-    color: '#4CAF50',
     fontSize: 14,
     fontWeight: '600',
   },
-}); 
+  platformText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  bioContainer: {
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 8,
+  },
+  bioText: {
+    color: '#fff',
+    fontSize: 13,
+    fontStyle: 'italic',
+  },
+});
+
+export default PlayerCard; 
