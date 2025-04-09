@@ -9,6 +9,8 @@ import TabNavigator from './src/navigation/TabNavigator';
 import { supabase } from './src/lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { PaperProvider, MD3LightTheme as DefaultTheme } from 'react-native-paper';
+import { AuthProvider } from './src/context/AuthContext';
+import Toast from 'react-native-toast-message';
 
 const Stack = createNativeStackNavigator();
 
@@ -42,25 +44,28 @@ export default function App() {
 
   return (
     <PaperProvider theme={theme}>
-      <NavigationContainer>
-        <Stack.Navigator
-          screenOptions={{
-            headerShown: false,
-            gestureEnabled: false
-          }}
-        >
-          {session ? (
-            <Stack.Screen name="MainApp" component={TabNavigator} />
-          ) : (
-            <>
-              <Stack.Screen name="Welcome" component={WelcomeScreen} />
-              <Stack.Screen name="Auth" component={AuthScreen} />
-              <Stack.Screen name="Register" component={RegisterScreen} />
-              <Stack.Screen name="Login" component={LoginScreen} />
-            </>
-          )}
-        </Stack.Navigator>
-      </NavigationContainer>
+      <AuthProvider>
+        <NavigationContainer>
+          <Stack.Navigator
+            screenOptions={{
+              headerShown: false,
+              gestureEnabled: false
+            }}
+          >
+            {session ? (
+              <Stack.Screen name="MainApp" component={TabNavigator} />
+            ) : (
+              <>
+                <Stack.Screen name="Welcome" component={WelcomeScreen} />
+                <Stack.Screen name="Auth" component={AuthScreen} />
+                <Stack.Screen name="Register" component={RegisterScreen} />
+                <Stack.Screen name="Login" component={LoginScreen} />
+              </>
+            )}
+          </Stack.Navigator>
+          <Toast />
+        </NavigationContainer>
+      </AuthProvider>
     </PaperProvider>
   );
 } 

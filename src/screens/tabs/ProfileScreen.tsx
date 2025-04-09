@@ -13,10 +13,12 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Button, TextInput } from 'react-native-paper';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../../lib/supabase';
 import { User, Game, UserGame } from '../../types';
+import { Portal, Modal } from 'react-native-paper';
+
 
 const { width } = Dimensions.get('window');
 
@@ -39,6 +41,9 @@ interface UserProfile {
   display_name: string | null;
   genre: string | null;
   platform: string | null;
+  discord_username: string | null;
+  steam_username: string | null;
+  epic_username: string | null;
 }
 
 interface UserGameResponse {
@@ -49,6 +54,8 @@ interface UserGameResponse {
 const ProfileScreen = () => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [games, setGames] = useState<Game[]>([]);
+  const [availableGames, setAvailableGames] = useState<Game[]>([]);
+  const [selectedGameIds, setSelectedGameIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,11 +70,28 @@ const ProfileScreen = () => {
   const [newGameName, setNewGameName] = useState('');
   const [genre, setGenre] = useState<string>('');
   const [platform, setPlatform] = useState<string>('');
+  const [socialAccounts, setSocialAccounts] = useState({
+    discord: '',
+    steam: '',
+    epic: ''
+  });
+  const [isEditModalVisible, setIsEditModalVisible] = useState(false);
 
   useEffect(() => {
     loadProfileAndGames();
+    loadAllGames(); 
   }, []);
+  const [allGames, setAllGames] = useState<Game[]>([]);
 
+  const loadAllGames = async () => {
+    const { data, error } = await supabase.from('games').select('*');
+    if (error) {
+      console.error('Error loading all games:', error);
+    } else {
+      setAllGames(data);
+    }
+  };
+  
   const loadProfileAndGames = async () => {
     try {
       setLoading(true);
@@ -86,18 +110,26 @@ const ProfileScreen = () => {
 
       // Load user's games
       const { data: userGames, error: gamesError } = await supabase
-        .from('user_games')
-        .select(`
-          game_id,
-          games (*)
-        `)
-        .eq('user_id', user.id) as { data: UserGameResponse[] | null, error: any };
+  .from('user_games')
+  .select(`
+    game_id,
+    games (*)
+  `)
+  .eq('user_id', user.id);
 
-      if (gamesError) throw gamesError;
+if (gamesError) throw gamesError;
+
 
       setProfile(profileData);
-      // Now userGames is properly typed
-      setGames((userGames || []).map(ug => ug.games));
+      // Fix the type issue by properly handling the games object structure
+      setGames((userGames || []).map(ug => {
+        // Ensure we're getting a single Game object, not an array
+        return typeof ug.games === 'object' && !Array.isArray(ug.games) 
+          ? ug.games as Game 
+          : {} as Game;
+      }));
+      setSelectedGameIds((userGames || []).map(ug => ug.game_id));
+
       
       setDisplayName(profileData.display_name || '');
       setUsername(profileData.username || '');
@@ -105,6 +137,11 @@ const ProfileScreen = () => {
       setAvatarUrl(profileData.avatar_url);
       setGamePreferences(profileData.game_preferences?.gameTypes || []);
       setPlayStyle(profileData.game_preferences?.playStyle || []);
+      setSocialAccounts({
+        discord: profileData.discord_username || '',
+        steam: profileData.steam_username || '',
+        epic: profileData.epic_username || ''
+      });
     } catch (error: any) {
       console.error('Error loading profile:', error);
       setError(error.message || 'Failed to load profile');
@@ -140,11 +177,32 @@ const ProfileScreen = () => {
           },
           genre: games[0]?.genre || null, // Take genre from first game if exists
           platform: games[0]?.platform || null, // Take platform from first game if exists
+          discord_username: socialAccounts.discord,
+          steam_username: socialAccounts.steam,
+          epic_username: socialAccounts.epic,
           updated_at: new Date().toISOString()
         })
         .eq('id', user.id);
 
       if (userError) throw userError;
+      
+      
+await supabase
+.from('user_games')
+.delete()
+.eq('user_id', user.id);
+
+const inserts = selectedGameIds.map((game_id) => ({
+  user_id: user.id,
+  game_id,
+}));
+
+const { error: insertError } = await supabase
+  .from('user_games')
+  .insert(inserts);
+
+if (insertError) throw insertError;
+
 
       Alert.alert('Success', 'Profile updated successfully');
       setIsEditing(false);
@@ -382,6 +440,42 @@ const ProfileScreen = () => {
           setPlayStyle,
           ['Aggressive', 'Defensive', 'Balanced', 'Support', 'Leader', 'Follower']
         )}
+        {isEditing && (
+  <View style={styles.section}>
+    <View style={styles.sectionHeader}>
+      <Ionicons name="game-controller" size={24} color="#7B2CBF" />
+      <Text style={styles.sectionTitle}>Select Games</Text>
+    </View>
+    <View style={styles.preferencesGrid}>
+      {allGames.map((game) => (
+        <TouchableOpacity
+          key={game.id}
+          style={[
+            styles.preferenceOption,
+            selectedGameIds.includes(game.id) && styles.preferenceOptionSelected
+          ]}
+          onPress={() => {
+            if (selectedGameIds.includes(game.id)) {
+              setSelectedGameIds(selectedGameIds.filter(id => id !== game.id));
+            } else {
+              setSelectedGameIds([...selectedGameIds, game.id]);
+            }
+          }}
+        >
+          <Text
+            style={[
+              styles.preferenceOptionText,
+              selectedGameIds.includes(game.id) && styles.preferenceOptionTextSelected
+            ]}
+          >
+            {game.name}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  </View>
+)}
+
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -423,6 +517,27 @@ const ProfileScreen = () => {
           )}
         </View>
 
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <MaterialCommunityIcons name="link-variant" size={24} color="#7B2CBF" />
+            <Text style={styles.sectionTitle}>Gaming Accounts</Text>
+          </View>
+          <View>
+            <View style={styles.socialAccountItem}>
+              <MaterialCommunityIcons name="discord" size={24} color="#7289DA" />
+              <Text style={styles.socialUsername}>{socialAccounts.discord || 'No Discord account linked'}</Text>
+            </View>
+            <View style={styles.socialAccountItem}>
+              <MaterialCommunityIcons name="steam" size={24} color="#00ADEE" />
+              <Text style={styles.socialUsername}>{socialAccounts.steam || 'No Steam account linked'}</Text>
+            </View>
+            <View style={styles.socialAccountItem}>
+              <MaterialCommunityIcons name="gamepad" size={24} color="#2F2F2F" />
+              <Text style={styles.socialUsername}>{socialAccounts.epic || 'No Epic account linked'}</Text>
+            </View>
+          </View>
+        </View>
+
         <Button
           mode="contained"
           onPress={() => {
@@ -439,79 +554,70 @@ const ProfileScreen = () => {
         </Button>
       </View>
 
-      {isAddingGame && (
-        <View style={styles.modalOverlay}>
-          <View style={styles.addGameModal}>
-            <Text style={styles.modalTitle}>Add New Game</Text>
+      <Portal>
+        <Modal
+          visible={isEditModalVisible}
+          onDismiss={() => setIsEditModalVisible(false)}
+          contentContainerStyle={styles.modalContainer}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Edit Profile</Text>
             <TextInput
+              label="Display Name"
+              value={displayName}
+              onChangeText={setDisplayName}
               style={styles.input}
-              value={newGameName}
-              onChangeText={setNewGameName}
-              placeholder="Game name"
-              mode="outlined"
-              outlineColor="#7B2CBF"
-              activeOutlineColor="#2196F3"
             />
             <TextInput
+              label="Username"
+              value={username}
+              onChangeText={setUsername}
               style={styles.input}
-              value={genre}
-              onChangeText={setGenre}
-              placeholder="Genre (e.g. FPS, RPG, MOBA)"
-              mode="outlined"
-              outlineColor="#7B2CBF"
-              activeOutlineColor="#2196F3"
             />
             <TextInput
+              label="Bio"
+              value={bio}
+              onChangeText={setBio}
               style={styles.input}
-              value={platform}
-              onChangeText={setPlatform}
-              placeholder="Platform (e.g. PC, PS5, Xbox)"
-              mode="outlined"
-              outlineColor="#7B2CBF"
-              activeOutlineColor="#2196F3"
+              multiline
+            />
+            <TextInput
+              label="Discord Username"
+              value={socialAccounts.discord}
+              onChangeText={(text) => setSocialAccounts(prev => ({ ...prev, discord: text }))}
+              style={styles.input}
+            />
+            <TextInput
+              label="Steam Username"
+              value={socialAccounts.steam}
+              onChangeText={(text) => setSocialAccounts(prev => ({ ...prev, steam: text }))}
+              style={styles.input}
+            />
+            <TextInput
+              label="Epic Username"
+              value={socialAccounts.epic}
+              onChangeText={(text) => setSocialAccounts(prev => ({ ...prev, epic: text }))}
+              style={styles.input}
             />
             <View style={styles.modalButtons}>
               <Button 
-                mode="outlined" 
-                onPress={() => {
-                  setIsAddingGame(false);
-                  setNewGameName('');
-                  setGenre('');
-                  setPlatform('');
-                }}
+                mode="outlined"
+                onPress={() => setIsEditModalVisible(false)}
                 style={styles.modalButton}
               >
                 Cancel
               </Button>
               <Button 
                 mode="contained"
-                onPress={async () => {
-                  if (newGameName) {
-                    const { data: { user } } = await supabase.auth.getUser();
-                    if (user) {
-                      await supabase
-                        .from('users')
-                        .update({
-                          genre,
-                          platform,
-                        })
-                        .eq('id', user.id);
-                    }
-                    setGenre('');
-                    setPlatform('');
-                    setIsAddingGame(false);
-                    setNewGameName('');
-                  }
-                }}
-                style={[styles.modalButton, styles.modalButtonPrimary]}
-                disabled={!newGameName}
+                onPress={handleSave}
+                style={styles.modalButtonPrimary}
               >
-                Add Game
+                Save Changes
               </Button>
             </View>
           </View>
-        </View>
-      )}
+        </Modal>
+      </Portal>
     </ScrollView>
   );
 };
@@ -519,7 +625,7 @@ const ProfileScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#0A0A0A',
   },
   loadingContainer: {
     flex: 1,
@@ -532,6 +638,8 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
+    padding: 20,
+    paddingTop: 60,
   },
   avatarOuterContainer: {
     marginBottom: 15,
@@ -565,9 +673,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   displayName: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#FFFFFF',
     marginBottom: 5,
   },
   displayNameInput: {
@@ -578,24 +686,38 @@ const styles = StyleSheet.create({
   },
   username: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.8)',
+    color: '#4A9EFF',
+    marginBottom: 20,
   },
   content: {
     padding: 20,
   },
   section: {
-    marginBottom: 25,
+    backgroundColor: '#1A1A1A',
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
+  },
+  sectionIcon: {
+    width: 24,
+    height: 24,
+    marginRight: 12,
+    tintColor: '#7B2CBF',
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    marginLeft: 10,
-    color: '#333',
+    color: '#FFFFFF',
+  },
+  sectionContent: {
+    color: '#6C7A8E',
+    fontSize: 16,
   },
   input: {
     marginBottom: 15,
@@ -687,7 +809,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   emptyText: {
-    color: '#666',
+    color: '#6C7A8E',
     fontSize: 16,
     fontStyle: 'italic',
   },
@@ -695,7 +817,17 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   editButton: {
-    marginTop: 20,
+    backgroundColor: '#7B2CBF',
+    borderRadius: 25,
+    paddingVertical: 12,
+    marginHorizontal: 16,
+    marginTop: 8,
+  },
+  editButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   modalOverlay: {
     position: 'absolute',
@@ -754,6 +886,34 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '500',
+  },
+  modalContainer: {
+    backgroundColor: '#fff',
+    padding: 20,
+    borderRadius: 8,
+    marginTop: 10,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  modalContent: {
+    // Add any additional styles for the modal content
+  },
+  socialAccountItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  socialIcon: {
+    width: 24,
+    height: 24,
+    marginRight: 12,
+  },
+  socialUsername: {
+    color: '#6C7A8E',
+    fontSize: 16,
   },
 });
 

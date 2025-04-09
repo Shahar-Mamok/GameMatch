@@ -18,15 +18,17 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
-
+  
     try {
       setLoading(true);
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-
+  
       if (error) throw error;
+  
+      navigation.replace('MainTabs'); // משנה את המסך למסך הראשי שלך
     } catch (error: any) {
       console.error('Login error:', error);
       Alert.alert('Error', error.message);
@@ -34,6 +36,7 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
       setLoading(false);
     }
   };
+  
 
   return (
     <View style={styles.container}>
