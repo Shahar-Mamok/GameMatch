@@ -36,9 +36,22 @@ export const SwipeScreen: React.FC<Props> = () => {
   const scale = useSharedValue(1);
   const nextScale = useSharedValue(0.9);
   const isSwiping = useSharedValue(false);
+  const borderColor = useSharedValue('#e600ff');
 
   useEffect(() => {
     loadPotentialMatches();
+    const cycleColors = () => {
+      borderColor.value = withTiming('#00e6e6', {
+        duration: 3000,
+        easing: Easing.linear,
+      }, () => {
+        borderColor.value = withTiming('#e600ff', {
+          duration: 3000,
+          easing: Easing.linear,
+        }, cycleColors);
+      });
+    };
+    cycleColors();
   }, []);
 
   const loadPotentialMatches = async () => {
@@ -55,6 +68,8 @@ export const SwipeScreen: React.FC<Props> = () => {
       if (userGamesError) throw userGamesError;
       const userGameIds = (userGames || []).map(ug => ug.game_id);
 
+      console.log('User Game IDs:', userGameIds);
+
       // Get potential matches (users who share at least one game)
       const { data: potentialMatches, error: matchesError } = await supabase
         .from('users')
@@ -69,14 +84,18 @@ export const SwipeScreen: React.FC<Props> = () => {
         .in('user_games.game_id', userGameIds);
 
       if (matchesError) throw matchesError;
-      
+
+      console.log('Potential Matches:', potentialMatches);
+
       if (potentialMatches) {
         // Transform the data to match our UserWithGames type
         const usersWithGames = potentialMatches.map(user => ({
           ...user,
           games: user.user_games.map(ug => ug.games)
         }));
-        
+
+        console.log('Users with Games:', usersWithGames);
+
         setUsers(usersWithGames);
         setCurrentIndex(0);
         setNextIndex(1);
@@ -210,6 +229,8 @@ export const SwipeScreen: React.FC<Props> = () => {
       { scale: scale.value }
     ] as any,
     zIndex: 2,
+    borderWidth: 4,
+    borderColor: borderColor.value,
   }));
 
   const nextCardStyle = useAnimatedStyle(() => ({
@@ -279,6 +300,7 @@ export const SwipeScreen: React.FC<Props> = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#0d0d0d', // Dark background
   },
   safeArea: {
     flex: 1,
@@ -288,11 +310,12 @@ const styles = StyleSheet.create({
     height: 50,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#1a1a1a', // Darker header
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#e600ff', // Neon pink
     textAlign: 'center',
   },
   cardContainer: {
@@ -306,13 +329,22 @@ const styles = StyleSheet.create({
     width: Math.min(SCREEN_WIDTH - 40, 360),
     aspectRatio: 0.7,
     position: 'absolute',
+    borderRadius: 10,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  '@keyframes neonBorder': {
+    '0%': { borderColor: '#e600ff' },
+    '50%': { borderColor: '#00e6e6' },
+    '100%': { borderColor: '#e600ff' },
   },
   loadingContainer: {
     justifyContent: 'center',
     alignItems: 'center',
   },
   noPlayersText: {
-    color: '#fff',
+    color: '#e600ff', // Neon pink
     fontSize: 18,
     textAlign: 'center',
   },
