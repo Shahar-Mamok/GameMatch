@@ -76,6 +76,9 @@ const ProfileScreen = () => {
     epic: ''
   });
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+  const [isGameModalVisible, setIsGameModalVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredGames, setFilteredGames] = useState<Game[]>([]);
 
   useEffect(() => {
     loadProfileAndGames();
@@ -163,55 +166,102 @@ if (gamesError) throw gamesError;
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No user logged in');
 
-      // Update users table with all fields
-      const { error: userError } = await supabase
+      // Prepare the profile update data
+      const profileUpdate = {
+        display_name: displayName.trim(),
+        username: username.trim(),
+        bio: bio.trim(),
+        avatar_url: avatarUrl,
+        game_preferences: {
+          gameTypes: gamePreferences,
+          playStyle: playStyle
+        },
+        discord_username: socialAccounts.discord.trim(),
+        steam_username: socialAccounts.steam.trim(),
+        epic_username: socialAccounts.epic.trim(),
+        updated_at: new Date().toISOString()
+      };
+
+      // Update user profile
+      const { error: profileError } = await supabase
         .from('users')
-        .update({
-          display_name: displayName,
-          username,
-          bio,
-          avatar_url: avatarUrl,
-          game_preferences: {
-            gameTypes: gamePreferences,
-            playStyle: playStyle
-          },
-          genre: games[0]?.genre || null, // Take genre from first game if exists
-          platform: games[0]?.platform || null, // Take platform from first game if exists
-          discord_username: socialAccounts.discord,
-          steam_username: socialAccounts.steam,
-          epic_username: socialAccounts.epic,
-          updated_at: new Date().toISOString()
-        })
+        .update(profileUpdate)
         .eq('id', user.id);
 
-      if (userError) throw userError;
-      
-      
-await supabase
-.from('user_games')
-.delete()
-.eq('user_id', user.id);
+      if (profileError) throw profileError;
 
-const inserts = selectedGameIds.map((game_id) => ({
-  user_id: user.id,
-  game_id,
-}));
+      // Handle game associations
+      // First delete existing associations
+      await supabase
+        .from('user_games')
+        .delete()
+        .eq('user_id', user.id);
 
-const { error: insertError } = await supabase
-  .from('user_games')
-  .insert(inserts);
+      // Then add new ones if there are any selected games
+      if (selectedGameIds.length > 0) {
+        const gameInserts = selectedGameIds.map(gameId => ({
+          id: crypto.randomUUID(),
+          user_id: user.id,
+          game_id: gameId,
+          created_at: new Date().toISOString()
+        }));
 
-if (insertError) throw insertError;
+        const { error: gamesError } = await supabase
+          .from('user_games')
+          .insert(gameInserts);
 
+        if (gamesError) {
+          console.error('Error inserting games:', gamesError);
+          throw new Error('Failed to update game preferences');
+        }
+      }
 
-      Alert.alert('Success', 'Profile updated successfully');
+      Alert.alert(
+        'Success',
+        'Your profile has been updated successfully!',
+        [{ text: 'OK', onPress: () => setIsEditing(false) }]
+      );
+
+      // Refresh profile data
+      await loadProfileAndGames();
+
+      // Ensure we exit edit mode
       setIsEditing(false);
+
     } catch (error: any) {
       console.error('Error updating profile:', error);
-      Alert.alert('Error', error.message || 'Failed to update profile');
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to update profile. Please try again.'
+      );
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEditPress = () => {
+    if (isEditing) {
+      // If we're currently editing, save changes
+      handleSave();
+    } else {
+      // If we're not editing, enter edit mode
+      setIsEditing(true);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    // Reset all form values to current profile values
+    setDisplayName(profile?.display_name || '');
+    setUsername(profile?.username || '');
+    setBio(profile?.bio || '');
+    setGamePreferences(profile?.game_preferences?.gameTypes || []);
+    setPlayStyle(profile?.game_preferences?.playStyle || []);
+    setSocialAccounts({
+      discord: profile?.discord_username || '',
+      steam: profile?.steam_username || '',
+      epic: profile?.epic_username || ''
+    });
+    setIsEditing(false);
   };
 
   const handleImagePick = async () => {
@@ -354,9 +404,77 @@ if (insertError) throw insertError;
     </View>
   );
 
-  const addGame = () => {
-    setIsAddingGame(true);
+  const handleAddGames = () => {
+    setIsGameModalVisible(true);
   };
+
+  const handleGameSearch = (query: string) => {
+    setSearchQuery(query);
+    const filtered = allGames.filter(game => 
+      game.name.toLowerCase().includes(query.toLowerCase())
+    );
+    setFilteredGames(filtered);
+  };
+
+  const GameSelectionModal = () => (
+    <Portal>
+      <Modal
+        visible={isGameModalVisible}
+        onDismiss={() => setIsGameModalVisible(false)}
+        contentContainerStyle={styles.gameModalContainer}
+      >
+        <View style={styles.gameModalContent}>
+          <Text style={styles.modalTitle}>Select Games</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search games..."
+            value={searchQuery}
+            onChangeText={handleGameSearch}
+            mode="outlined"
+          />
+          <ScrollView style={styles.gamesList}>
+            {(filteredGames.length > 0 ? filteredGames : allGames).map((game) => (
+              <TouchableOpacity
+                key={game.id}
+                style={[
+                  styles.gameItem,
+                  selectedGameIds.includes(game.id) && styles.selectedGameItem,
+                ]}
+                onPress={() => {
+                  if (selectedGameIds.includes(game.id)) {
+                    setSelectedGameIds(prev => prev.filter(id => id !== game.id));
+                  } else {
+                    setSelectedGameIds(prev => [...prev, game.id]);
+                  }
+                }}
+              >
+                <Text style={[
+                  styles.gameItemText,
+                  selectedGameIds.includes(game.id) && styles.selectedGameItemText
+                ]}>
+                  {game.name}
+                </Text>
+                {game.platform && (
+                  <Text style={styles.gamePlatform}>
+                    {Array.isArray(game.platform) ? game.platform.join(', ') : game.platform}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          <View style={styles.modalButtons}>
+            <Button
+              mode="outlined"
+              onPress={() => setIsGameModalVisible(false)}
+              style={styles.modalButton}
+            >
+              Done
+            </Button>
+          </View>
+        </View>
+      </Modal>
+    </Portal>
+  );
 
   if (loading && !refreshing) {
     return (
@@ -479,79 +597,77 @@ if (insertError) throw insertError;
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="apps" size={24} color="#7B2CBF" />
-            <Text style={styles.sectionTitle}>Games</Text>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.gamesContainer}>
-            {games.length > 0 ? (
-              games.map((game) => (
-                <TouchableOpacity key={game.id} style={styles.gameCard}>
-                  <Image source={{ uri: 'https://via.placeholder.com/200x300' }} style={styles.gameImage} />
-                  <LinearGradient
-                    colors={['transparent', 'rgba(0,0,0,0.8)']}
-                    style={styles.gameOverlay}
-                  >
-                    <Text style={styles.gameName}>{game.name}</Text>
-                    <View style={styles.gameTags}>
-                      {game.genre && <Text style={styles.gameTag}>{game.genre}</Text>}
-                      {game.platform && game.platform.map((p, i) => (
-                        <Text key={i} style={styles.gameTag}>{p}</Text>
-                      ))}
-                    </View>
-                  </LinearGradient>
-                </TouchableOpacity>
-              ))
-            ) : (
-              <Text style={styles.emptyText}>No games added yet</Text>
-            )}
-          </ScrollView>
-          {isEditing && (
-            <Button 
-              mode="contained" 
-              onPress={addGame}
-              style={styles.addButton}
-              icon="plus"
-            >
-              Add Game
-            </Button>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
             <MaterialCommunityIcons name="link-variant" size={24} color="#7B2CBF" />
             <Text style={styles.sectionTitle}>Gaming Accounts</Text>
           </View>
-          <View>
-            <View style={styles.socialAccountItem}>
-              <MaterialCommunityIcons name="discord" size={24} color="#7289DA" />
-              <Text style={styles.socialUsername}>{socialAccounts.discord || 'No Discord account linked'}</Text>
+          {isEditing ? (
+            <View>
+              <TextInput
+                label="Discord Username"
+                value={socialAccounts.discord}
+                onChangeText={(text) => setSocialAccounts(prev => ({ ...prev, discord: text }))}
+                style={styles.input}
+              />
+              <TextInput
+                label="Steam Username"
+                value={socialAccounts.steam}
+                onChangeText={(text) => setSocialAccounts(prev => ({ ...prev, steam: text }))}
+                style={styles.input}
+              />
+              <TextInput
+                label="Epic Username"
+                value={socialAccounts.epic}
+                onChangeText={(text) => setSocialAccounts(prev => ({ ...prev, epic: text }))}
+                style={styles.input}
+              />
             </View>
-            <View style={styles.socialAccountItem}>
-              <MaterialCommunityIcons name="steam" size={24} color="#00ADEE" />
-              <Text style={styles.socialUsername}>{socialAccounts.steam || 'No Steam account linked'}</Text>
+          ) : (
+            <View>
+              <View style={styles.socialAccountItem}>
+                <MaterialCommunityIcons name="discord" size={24} color="#7289DA" />
+                <Text style={styles.socialUsername}>{socialAccounts.discord || 'No Discord account linked'}</Text>
+              </View>
+              <View style={styles.socialAccountItem}>
+                <MaterialCommunityIcons name="steam" size={24} color="#00ADEE" />
+                <Text style={styles.socialUsername}>{socialAccounts.steam || 'No Steam account linked'}</Text>
+              </View>
+              <View style={styles.socialAccountItem}>
+                <MaterialCommunityIcons name="gamepad" size={24} color="#2F2F2F" />
+                <Text style={styles.socialUsername}>{socialAccounts.epic || 'No Epic account linked'}</Text>
+              </View>
             </View>
-            <View style={styles.socialAccountItem}>
-              <MaterialCommunityIcons name="gamepad" size={24} color="#2F2F2F" />
-              <Text style={styles.socialUsername}>{socialAccounts.epic || 'No Epic account linked'}</Text>
-            </View>
-          </View>
+          )}
         </View>
 
-        <Button
-          mode="contained"
-          onPress={() => {
-            if (isEditing) {
-              handleSave();
-            } else {
-              setIsEditing(true);
-            }
-          }}
-          style={[styles.editButton, isEditing && styles.saveButton]}
-          icon={isEditing ? "check" : "pencil"}
-        >
-          {isEditing ? 'Save Changes' : 'Edit Profile'}
-        </Button>
+        <View style={styles.editButtonsContainer}>
+          {isEditing ? (
+            <>
+              <Button
+                mode="outlined"
+                onPress={handleCancelEdit}
+                style={styles.cancelButton}
+              >
+                Cancel
+              </Button>
+              <Button
+                mode="contained"
+                onPress={handleSave}
+                style={styles.saveButton}
+                loading={loading}
+              >
+                Save Changes
+              </Button>
+            </>
+          ) : (
+            <Button
+              mode="contained"
+              onPress={() => setIsEditing(true)}
+              style={styles.editButton}
+            >
+              Edit Profile
+            </Button>
+          )}
+        </View>
       </View>
 
       <Portal>
@@ -618,6 +734,7 @@ if (insertError) throw insertError;
           </View>
         </Modal>
       </Portal>
+      <GameSelectionModal />
     </ScrollView>
   );
 };
@@ -755,49 +872,6 @@ const styles = StyleSheet.create({
   preferenceOptionTextSelected: {
     color: '#fff',
   },
-  gamesContainer: {
-    marginHorizontal: -5,
-  },
-  gameCard: {
-    width: width * 0.6,
-    height: 200,
-    marginHorizontal: 5,
-    borderRadius: 15,
-    overflow: 'hidden',
-  },
-  gameImage: {
-    width: '100%',
-    height: '100%',
-  },
-  gameOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 15,
-  },
-  gameName: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 5,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
-  gameTags: {
-    flexDirection: 'row',
-    gap: 5,
-    marginTop: 5,
-  },
-  gameTag: {
-    color: '#fff',
-    fontSize: 12,
-    backgroundColor: 'rgba(123, 44, 191, 0.8)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
   errorContainer: {
     padding: 10,
     backgroundColor: '#ffebee',
@@ -813,17 +887,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontStyle: 'italic',
   },
-  addButton: {
-    marginTop: 10,
+  editButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 20,
+    paddingHorizontal: 16,
+    gap: 12,
   },
-  editButton: {
-    backgroundColor: '#7B2CBF',
+  cancelButton: {
+    flex: 1,
     borderRadius: 25,
     paddingVertical: 12,
-    marginHorizontal: 16,
-    marginTop: 8,
+    borderColor: '#7B2CBF',
+    borderWidth: 1,
   },
-  editButtonText: {
+  editButton: {
+    flex: 1,
+    borderRadius: 25,
+    paddingVertical: 12,
+    backgroundColor: '#7B2CBF',
+  },
+  saveButton: {
+    flex: 1,
+    borderRadius: 25,
+    paddingVertical: 12,
+    backgroundColor: '#4CAF50',
+  },
+  buttonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
@@ -869,9 +960,6 @@ const styles = StyleSheet.create({
   modalButtonPrimary: {
     backgroundColor: '#7B2CBF',
   },
-  saveButton: {
-    backgroundColor: '#4CAF50',
-  },
   preferencesContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -888,18 +976,44 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   modalContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: '#1A1A1A',
+    margin: 20,
+    borderRadius: 12,
     padding: 20,
-    borderRadius: 8,
-    marginTop: 10,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    maxHeight: '80%',
   },
   modalContent: {
-    // Add any additional styles for the modal content
+    flex: 1,
+  },
+  searchInput: {
+    marginBottom: 15,
+    backgroundColor: '#fff',
+  },
+  gamesList: {
+    maxHeight: 400,
+  },
+  gameItem: {
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  selectedGameItem: {
+    backgroundColor: 'rgba(123, 44, 191, 0.2)',
+  },
+  gameItemText: {
+    color: '#fff',
+    fontSize: 16,
+  },
+  selectedGameItemText: {
+    color: '#7B2CBF',
+    fontWeight: 'bold',
+  },
+  gamePlatform: {
+    color: '#666',
+    fontSize: 14,
   },
   socialAccountItem: {
     flexDirection: 'row',
@@ -914,6 +1028,16 @@ const styles = StyleSheet.create({
   socialUsername: {
     color: '#6C7A8E',
     fontSize: 16,
+  },
+  gameModalContainer: {
+    backgroundColor: '#1A1A1A',
+    margin: 20,
+    borderRadius: 12,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  gameModalContent: {
+    flex: 1,
   },
 });
 
