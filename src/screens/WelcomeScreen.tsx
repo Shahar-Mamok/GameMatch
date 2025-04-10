@@ -127,6 +127,9 @@ export const WelcomeScreen = ({ navigation }: WelcomeScreenProps) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0d0d0d',
   },
   content: {
     flex: 1,
@@ -134,9 +137,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#ffffff',
+    color: '#e600ff',
+    textAlign: 'center',
+    boxShadow: '0 0 10px #e600ff',
     marginBottom: 15,
   },
   subtitle: {

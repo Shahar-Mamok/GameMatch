@@ -17,7 +17,8 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({ user }) => {
         source={{ 
           uri: user.avatar_url || 'https://picsum.photos/400/600'
         }} 
-        style={styles.image} 
+        style={styles.image}
+        resizeMode="cover"
       />
       <LinearGradient
         colors={['transparent', 'rgba(0,0,0,0.8)']}
@@ -65,7 +66,6 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
   },
   gradient: {
     position: 'absolute',

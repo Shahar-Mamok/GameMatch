@@ -36,6 +36,9 @@ export const AuthScreen = ({ navigation }: AuthScreenProps) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0d0d0d',
   },
   content: {
     flex: 1,
@@ -44,13 +47,11 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   title: {
-    fontSize: 32,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 40,
-    textShadowColor: '#000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 5,
+    color: '#e600ff',
+    textAlign: 'center',
+    textShadow: '0 0 10px #e600ff',
   },
   buttonContainer: {
     width: '100%',

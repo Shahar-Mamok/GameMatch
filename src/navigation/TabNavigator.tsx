@@ -1,57 +1,65 @@
-import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-
-import CardsScreen from '../screens/tabs/CardsScreen';
-import ProfileScreen from '../screens/tabs/ProfileScreen';
-import ChatsScreen from '../screens/tabs/ChatsScreen';
-import SettingsScreen from '../screens/tabs/SettingsScreen';
+import SwipeScreen from '../screens/SwipeScreen';
+import ChatsScreen from '../screens/ChatsScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 
 const Tab = createBottomTabNavigator();
 
-const TabNavigator = () => {
+export default function TabNavigator() {
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarIcon: ({ focused, color, size }) => {
-          let iconName;
-
-          if (route.name === 'Cards') {
-            iconName = focused ? 'card' : 'card-outline';
-          } else if (route.name === 'Profile') {
-            iconName = focused ? 'person' : 'person-outline';
-          } else if (route.name === 'Chats') {
-            iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
-          } else if (route.name === 'Settings') {
-            iconName = focused ? 'settings' : 'settings-outline';
-          }
-
-          return <Ionicons name={iconName} size={size} color={color} />;
-        },
-        tabBarActiveTintColor: '#7B2CBF',
-        tabBarInactiveTintColor: '#2196F3',
+      screenOptions={{
         tabBarStyle: {
-          backgroundColor: '#1a1a1a',
-          borderTopColor: 'rgba(123, 44, 191, 0.2)',
-          borderTopWidth: 1,
-          paddingBottom: 5,
-          paddingTop: 5,
-          height: 60,
+          backgroundColor: '#0d0d0d',
+          borderTopColor: '#e600ff',
         },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '600',
-          marginBottom: 5,
-        }
-      })}
+        tabBarActiveTintColor: '#e600ff',
+        tabBarInactiveTintColor: '#666',
+        headerShown: false,
+      }}
     >
-      <Tab.Screen name="Cards" component={CardsScreen} options={{ title: 'Cards' }} />
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
-      <Tab.Screen name="Chats" component={ChatsScreen} options={{ title: 'Chats' }} />
-      <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+      <Tab.Screen 
+        name="SwipeTab" 
+        component={SwipeScreen}
+        options={{
+          title: 'התאמות',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="heart" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name="ChatsTab" 
+        component={ChatsScreen}
+        options={{
+          title: 'שיחות',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="chatbubbles" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name="ProfileTab" 
+        component={ProfileScreen}
+        options={{
+          title: 'פרופיל',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen 
+        name="SettingsTab" 
+        component={SettingsScreen}
+        options={{
+          title: 'הגדרות',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="settings" size={size} color={color} />
+          ),
+        }}
+      />
     </Tab.Navigator>
   );
-};
-
-export default TabNavigator; 
+} 

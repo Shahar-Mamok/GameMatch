@@ -15,14 +15,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Button, TextInput } from 'react-native-paper';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase } from '../../lib/supabase';
-import { User, Game, UserGame } from '../../types';
+import { supabase } from '../lib/supabase';
+import { User, Game, UserGame } from '../types';
 import { Portal, Modal } from 'react-native-paper';
-
 
 const { width } = Dimensions.get('window');
 
-// Add type for icon names
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
 interface UserProfile {
@@ -79,12 +77,12 @@ const ProfileScreen = () => {
   const [isGameModalVisible, setIsGameModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredGames, setFilteredGames] = useState<Game[]>([]);
+  const [allGames, setAllGames] = useState<Game[]>([]);
 
   useEffect(() => {
     loadProfileAndGames();
     loadAllGames(); 
   }, []);
-  const [allGames, setAllGames] = useState<Game[]>([]);
 
   const loadAllGames = async () => {
     const { data, error } = await supabase.from('games').select('*');
@@ -102,7 +100,6 @@ const ProfileScreen = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No user logged in');
 
-      // Load user profile
       const { data: profileData, error: profileError } = await supabase
         .from('users')
         .select('*')
@@ -111,29 +108,24 @@ const ProfileScreen = () => {
 
       if (profileError) throw profileError;
 
-      // Load user's games
       const { data: userGames, error: gamesError } = await supabase
-  .from('user_games')
-  .select(`
-    game_id,
-    games (*)
-  `)
-  .eq('user_id', user.id);
+        .from('user_games')
+        .select(`
+          game_id,
+          games (*)
+        `)
+        .eq('user_id', user.id);
 
-if (gamesError) throw gamesError;
-
+      if (gamesError) throw gamesError;
 
       setProfile(profileData);
-      // Fix the type issue by properly handling the games object structure
       setGames((userGames || []).map(ug => {
-        // Ensure we're getting a single Game object, not an array
         return typeof ug.games === 'object' && !Array.isArray(ug.games) 
           ? ug.games as Game 
           : {} as Game;
       }));
       setSelectedGameIds((userGames || []).map(ug => ug.game_id));
 
-      
       setDisplayName(profileData.display_name || '');
       setUsername(profileData.username || '');
       setBio(profileData.bio || '');
@@ -166,7 +158,6 @@ if (gamesError) throw gamesError;
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('No user logged in');
 
-      // Prepare the profile update data
       const profileUpdate = {
         display_name: displayName.trim(),
         username: username.trim(),
@@ -182,7 +173,6 @@ if (gamesError) throw gamesError;
         updated_at: new Date().toISOString()
       };
 
-      // Update user profile
       const { error: profileError } = await supabase
         .from('users')
         .update(profileUpdate)
@@ -190,14 +180,11 @@ if (gamesError) throw gamesError;
 
       if (profileError) throw profileError;
 
-      // Handle game associations
-      // First delete existing associations
       await supabase
         .from('user_games')
         .delete()
         .eq('user_id', user.id);
 
-      // Then add new ones if there are any selected games
       if (selectedGameIds.length > 0) {
         const gameInserts = selectedGameIds.map(gameId => ({
           id: crypto.randomUUID(),
@@ -222,10 +209,8 @@ if (gamesError) throw gamesError;
         [{ text: 'OK', onPress: () => setIsEditing(false) }]
       );
 
-      // Refresh profile data
       await loadProfileAndGames();
 
-      // Ensure we exit edit mode
       setIsEditing(false);
 
     } catch (error: any) {
@@ -241,16 +226,13 @@ if (gamesError) throw gamesError;
 
   const handleEditPress = () => {
     if (isEditing) {
-      // If we're currently editing, save changes
       handleSave();
     } else {
-      // If we're not editing, enter edit mode
       setIsEditing(true);
     }
   };
 
   const handleCancelEdit = () => {
-    // Reset all form values to current profile values
     setDisplayName(profile?.display_name || '');
     setUsername(profile?.username || '');
     setBio(profile?.bio || '');
@@ -278,11 +260,9 @@ if (gamesError) throw gamesError;
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('No user logged in');
 
-        // Convert image to blob
         const response = await fetch(result.assets[0].uri);
         const blob = await response.blob();
 
-        // Upload image to Supabase Storage
         const filePath = `${user.id}/avatar.jpg`;
         const { error: uploadError } = await supabase.storage
           .from('avatars')
@@ -292,14 +272,12 @@ if (gamesError) throw gamesError;
 
         if (uploadError) throw uploadError;
 
-        // Get public URL
         const { data: { publicUrl } } = supabase.storage
           .from('avatars')
           .getPublicUrl(filePath);
 
         setAvatarUrl(publicUrl);
         
-        // Update user profile with new avatar URL
         const { error: updateError } = await supabase
           .from('users')
           .update({ avatar_url: publicUrl })
